@@ -17,14 +17,23 @@ import (
 	apps "k8s.io/client-go/pkg/apis/apps/v1beta1"
 )
 
-func PatchStatefulSet(c clientset.Interface, cur *apps.StatefulSet, transform func(*apps.StatefulSet)) (*apps.StatefulSet, error) {
+func CreateOrPatchStatefulSet(c clientset.Interface, meta metav1.ObjectMeta, transform func(*apps.StatefulSet) *apps.StatefulSet) (*apps.StatefulSet, error) {
+	cur, err := c.AppsV1beta1().StatefulSets(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
+	if kerr.IsNotFound(err) {
+		return c.AppsV1beta1().StatefulSets(meta.Namespace).Create(&apps.StatefulSet{ObjectMeta: meta})
+	} else if err != nil {
+		return nil, err
+	}
+	return PatchStatefulSet(c, cur, transform)
+}
+
+func PatchStatefulSet(c clientset.Interface, cur *apps.StatefulSet, transform func(*apps.StatefulSet) *apps.StatefulSet) (*apps.StatefulSet, error) {
 	curJson, err := json.Marshal(cur)
 	if err != nil {
 		return nil, err
 	}
 
-	transform(cur)
-	modJson, err := json.Marshal(cur)
+	modJson, err := json.Marshal(transform(cur))
 	if err != nil {
 		return nil, err
 	}
@@ -32,6 +41,9 @@ func PatchStatefulSet(c clientset.Interface, cur *apps.StatefulSet, transform fu
 	patch, err := jsonpatch.CreatePatch(curJson, modJson)
 	if err != nil {
 		return nil, err
+	}
+	if len(patch) == 0 {
+		return cur, nil
 	}
 	pb, err := json.MarshalIndent(patch, "", "  ")
 	if err != nil {
@@ -41,7 +53,7 @@ func PatchStatefulSet(c clientset.Interface, cur *apps.StatefulSet, transform fu
 	return c.AppsV1beta1().StatefulSets(cur.Namespace).Patch(cur.Name, types.JSONPatchType, pb)
 }
 
-func TryPatchStatefulSet(c clientset.Interface, meta metav1.ObjectMeta, transform func(*apps.StatefulSet)) (*apps.StatefulSet, error) {
+func TryPatchStatefulSet(c clientset.Interface, meta metav1.ObjectMeta, transform func(*apps.StatefulSet) *apps.StatefulSet) (*apps.StatefulSet, error) {
 	attempt := 0
 	for ; attempt < maxAttempts; attempt = attempt + 1 {
 		cur, err := c.AppsV1beta1().StatefulSets(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
@@ -56,15 +68,14 @@ func TryPatchStatefulSet(c clientset.Interface, meta metav1.ObjectMeta, transfor
 	return nil, fmt.Errorf("Failed to patch StatefulSet %s@%s after %d attempts.", meta.Name, meta.Namespace, attempt)
 }
 
-func UpdateStatefulSet(c clientset.Interface, meta metav1.ObjectMeta, transform func(*apps.StatefulSet)) (*apps.StatefulSet, error) {
+func UpdateStatefulSet(c clientset.Interface, meta metav1.ObjectMeta, transform func(*apps.StatefulSet) *apps.StatefulSet) (*apps.StatefulSet, error) {
 	attempt := 0
 	for ; attempt < maxAttempts; attempt = attempt + 1 {
 		cur, err := c.AppsV1beta1().StatefulSets(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
 		if kerr.IsNotFound(err) {
 			return cur, err
 		} else if err == nil {
-			transform(cur)
-			return c.AppsV1beta1().StatefulSets(cur.Namespace).Update(cur)
+			return c.AppsV1beta1().StatefulSets(cur.Namespace).Update(transform(cur))
 		}
 		glog.Errorf("Attempt %d failed to update StatefulSet %s@%s due to %s.", attempt, cur.Name, cur.Namespace, err)
 		time.Sleep(retryInterval)

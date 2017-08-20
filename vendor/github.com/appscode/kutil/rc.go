@@ -17,14 +17,23 @@ import (
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 )
 
-func PatchRC(c clientset.Interface, cur *apiv1.ReplicationController, transform func(*apiv1.ReplicationController)) (*apiv1.ReplicationController, error) {
+func CreateOrPatchRC(c clientset.Interface, meta metav1.ObjectMeta, transform func(*apiv1.ReplicationController) *apiv1.ReplicationController) (*apiv1.ReplicationController, error) {
+	cur, err := c.CoreV1().ReplicationControllers(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
+	if kerr.IsNotFound(err) {
+		return c.CoreV1().ReplicationControllers(meta.Namespace).Create(&apiv1.ReplicationController{ObjectMeta: meta})
+	} else if err != nil {
+		return nil, err
+	}
+	return PatchRC(c, cur, transform)
+}
+
+func PatchRC(c clientset.Interface, cur *apiv1.ReplicationController, transform func(*apiv1.ReplicationController) *apiv1.ReplicationController) (*apiv1.ReplicationController, error) {
 	curJson, err := json.Marshal(cur)
 	if err != nil {
 		return nil, err
 	}
 
-	transform(cur)
-	modJson, err := json.Marshal(cur)
+	modJson, err := json.Marshal(transform(cur))
 	if err != nil {
 		return nil, err
 	}
@@ -32,6 +41,9 @@ func PatchRC(c clientset.Interface, cur *apiv1.ReplicationController, transform 
 	patch, err := jsonpatch.CreatePatch(curJson, modJson)
 	if err != nil {
 		return nil, err
+	}
+	if len(patch) == 0 {
+		return cur, nil
 	}
 	pb, err := json.MarshalIndent(patch, "", "  ")
 	if err != nil {
@@ -41,7 +53,7 @@ func PatchRC(c clientset.Interface, cur *apiv1.ReplicationController, transform 
 	return c.CoreV1().ReplicationControllers(cur.Namespace).Patch(cur.Name, types.JSONPatchType, pb)
 }
 
-func TryPatchRC(c clientset.Interface, meta metav1.ObjectMeta, transform func(*apiv1.ReplicationController)) (*apiv1.ReplicationController, error) {
+func TryPatchRC(c clientset.Interface, meta metav1.ObjectMeta, transform func(*apiv1.ReplicationController) *apiv1.ReplicationController) (*apiv1.ReplicationController, error) {
 	attempt := 0
 	for ; attempt < maxAttempts; attempt = attempt + 1 {
 		cur, err := c.CoreV1().ReplicationControllers(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
@@ -56,15 +68,14 @@ func TryPatchRC(c clientset.Interface, meta metav1.ObjectMeta, transform func(*a
 	return nil, fmt.Errorf("Failed to patch ReplicationController %s@%s after %d attempts.", meta.Name, meta.Namespace, attempt)
 }
 
-func UpdateRC(c clientset.Interface, meta metav1.ObjectMeta, transform func(*apiv1.ReplicationController)) (*apiv1.ReplicationController, error) {
+func UpdateRC(c clientset.Interface, meta metav1.ObjectMeta, transform func(*apiv1.ReplicationController) *apiv1.ReplicationController) (*apiv1.ReplicationController, error) {
 	attempt := 0
 	for ; attempt < maxAttempts; attempt = attempt + 1 {
 		cur, err := c.CoreV1().ReplicationControllers(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
 		if kerr.IsNotFound(err) {
 			return cur, err
 		} else if err == nil {
-			transform(cur)
-			return c.CoreV1().ReplicationControllers(cur.Namespace).Update(cur)
+			return c.CoreV1().ReplicationControllers(cur.Namespace).Update(transform(cur))
 		}
 		glog.Errorf("Attempt %d failed to update ReplicationController %s@%s due to %s.", attempt, cur.Name, cur.Namespace, err)
 		time.Sleep(retryInterval)
