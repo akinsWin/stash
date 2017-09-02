@@ -3,7 +3,7 @@ package framework
 import (
 	"github.com/appscode/go/crypto/rand"
 	"github.com/appscode/go/types"
-	sapi "github.com/appscode/stash/api"
+	sapi "github.com/appscode/stash/apis/stash/v1alpha1"
 	"github.com/appscode/stash/pkg/util"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

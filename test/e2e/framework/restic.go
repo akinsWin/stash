@@ -6,7 +6,7 @@ import (
 
 	"github.com/appscode/go/crypto/rand"
 	"github.com/appscode/log"
-	tapi "github.com/appscode/stash/api"
+	tapi "github.com/appscode/stash/apis/stash/v1alpha1"
 	. "github.com/onsi/gomega"
 	kerr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -123,7 +123,7 @@ func (f *Framework) DeleteRestic(meta metav1.ObjectMeta) error {
 func (f *Framework) UpdateRestic(meta metav1.ObjectMeta, transformer func(tapi.Restic) tapi.Restic) error {
 	attempt := 0
 	for ; attempt < maxAttempts; attempt = attempt + 1 {
-		cur, err := f.StashClient.Restics(meta.Namespace).Get(meta.Name)
+		cur, err := f.StashClient.Restics(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
 		if kerr.IsNotFound(err) {
 			return nil
 		} else if err == nil {
@@ -141,7 +141,7 @@ func (f *Framework) UpdateRestic(meta metav1.ObjectMeta, transformer func(tapi.R
 
 func (f *Framework) EventuallyRestic(meta metav1.ObjectMeta) GomegaAsyncAssertion {
 	return Eventually(func() *tapi.Restic {
-		obj, err := f.StashClient.Restics(meta.Namespace).Get(meta.Name)
+		obj, err := f.StashClient.Restics(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
 		return obj
 	})

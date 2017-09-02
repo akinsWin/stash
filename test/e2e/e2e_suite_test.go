@@ -6,7 +6,7 @@ import (
 	"time"
 
 	logs "github.com/appscode/log/golog"
-	sapi "github.com/appscode/stash/api"
+	sapi "github.com/appscode/stash/apis/stash/v1alpha1"
 	rcs "github.com/appscode/stash/client/clientset"
 	"github.com/appscode/stash/pkg/controller"
 	"github.com/appscode/stash/test/e2e/framework"

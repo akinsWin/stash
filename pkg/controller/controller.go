@@ -3,8 +3,9 @@ package controller
 import (
 	"time"
 
-	tapi "github.com/appscode/stash/api"
-	scs "github.com/appscode/stash/client/clientset"
+	sapi "github.com/appscode/stash/apis/stash"
+	sapi_v1alpha1 "github.com/appscode/stash/apis/stash/v1alpha1"
+	scs "github.com/appscode/stash/client/typed/stash/v1alpha1"
 	"github.com/appscode/stash/pkg/util"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -20,13 +21,13 @@ const (
 
 type Controller struct {
 	kubeClient      clientset.Interface
-	stashClient     scs.ExtensionInterface
+	stashClient     scs.ResticsGetter
 	crdClient       apiextensionsclient.Interface
 	SidecarImageTag string
 	resyncPeriod    time.Duration
 }
 
-func New(kubeClient clientset.Interface, crdClient apiextensionsclient.Interface, extClient scs.ExtensionInterface, tag string, resyncPeriod time.Duration) *Controller {
+func New(kubeClient clientset.Interface, crdClient apiextensionsclient.Interface, extClient scs.ResticsGetter, tag string, resyncPeriod time.Duration) *Controller {
 	return &Controller{
 		kubeClient:      kubeClient,
 		stashClient:     extClient,
@@ -48,17 +49,17 @@ func (c *Controller) ensureCustomResourceDefinitions() error {
 	crds := []*apiextensions.CustomResourceDefinition{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   tapi.ResourceTypeRestic + "." + tapi.V1alpha1SchemeGroupVersion.Group,
+				Name:   sapi_v1alpha1.ResourceTypeRestic + "." + sapi_v1alpha1.SchemeGroupVersion.Group,
 				Labels: map[string]string{"app": "stash"},
 			},
 			Spec: apiextensions.CustomResourceDefinitionSpec{
-				Group:   tapi.GroupName,
-				Version: tapi.V1alpha1SchemeGroupVersion.Version,
+				Group:   sapi.GroupName,
+				Version: sapi_v1alpha1.SchemeGroupVersion.Version,
 				Scope:   apiextensions.NamespaceScoped,
 				Names: apiextensions.CustomResourceDefinitionNames{
-					Singular:   tapi.ResourceNameRestic,
-					Plural:     tapi.ResourceTypeRestic,
-					Kind:       tapi.ResourceKindRestic,
+					Singular:   sapi_v1alpha1.ResourceNameRestic,
+					Plural:     sapi_v1alpha1.ResourceTypeRestic,
+					Kind:       sapi_v1alpha1.ResourceKindRestic,
 					ShortNames: []string{"rst"},
 				},
 			},
